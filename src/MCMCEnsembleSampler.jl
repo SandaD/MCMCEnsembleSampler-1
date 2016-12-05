@@ -1,11 +1,12 @@
 module MCMCEnsembleSampler
 
 import StatsBase
-export s_m_mcmc, d_e_mcmc
+export mcmc
 
-function s_m_mcmc(f::Function, max_iter::Int, n_walkers::Int, n_dim::Int, init_range::Array)
+function mcmc(f::Function, max_iter::Int, n_walkers::Int, n_dim::Int, init_range::Array, jump)
 
   max_iter > n_walkers || error("max_iter must be larger than n_walkers")
+  (jump != "s_m" || jump != "d_e") || error("Invalid selection for jump: select either s_m or d_e.")
 
   # initial values
   chain_length = div(max_iter, n_walkers)
@@ -32,11 +33,11 @@ function s_m_mcmc(f::Function, max_iter::Int, n_walkers::Int, n_dim::Int, init_r
   for l in 2:chain_length
     for n in 1:n_walkers
 
-      z = ((rand()+1)^2)/2
-      a = StatsBase.sample([i for i in 1:n_walkers if i != n])
-      par_active = ensemble_old[a,:]
-
-      ensemble_new[n,:] = par_active + z^(n_dim-1) * (ensemble_old[n,:] - par_active)
+      if (jump == "s_m")
+        ensemble_new[n,:] = s_m(n_walkers, ensemble_old, n_dim, n)
+      elseif (jump == "d_e")
+        ensemble_new[n,:] = d_e(n_walkers, ensemble_old, n_dim, n, l)
+      end
 
       log_p_new = f(ensemble_new[n,:])
 
@@ -59,76 +60,30 @@ function s_m_mcmc(f::Function, max_iter::Int, n_walkers::Int, n_dim::Int, init_r
 end
 
 
-function d_e_mcmc(f::Function, max_iter::Int, n_walkers::Int, n_dim::Int, init_range::Array)
+function s_m(n_walkers::Int, ensemble_old::Array{Float64}, n_dim::Int, n::Int)
 
-  # initial values
+  z = ((rand()+1)^2)/2
+  a = StatsBase.sample([i for i in 1:n_walkers if i != n])
+  par_active = ensemble_old[a,:]
 
-  chain_length = div(max_iter, n_walkers)
-  sum_log_p_d_e = zeros(Float64, chain_length)
+  return par_active + z^(n_dim-1) * (ensemble_old[n,:] - par_active)
+end
 
-  log_p = Array{Float64}(n_walkers, chain_length)
-  log_p_old = Array{Float64}(n_walkers)
 
-  ensemble_old = rand(n_walkers, n_dim) * (init_range[2] - init_range[1]) + init_range[1]
+function d_e(n_walkers::Int, ensemble_old::Array{Float64}, n_dim::Int, n::Int, l::Int)
 
-  ensemble_new = Array{Float64}(n_walkers, n_dim)
-  x_chain = Array{Float64}(n_walkers, chain_length, n_dim)
-
-  for k in 1:n_walkers
-
-      log_p_old[k] = f(ensemble_old[k,:])
-
+  z = 2.38 / sqrt(2 * n_dim)
+  if (l % 10 == 0)
+    z=1
   end
 
-  log_p[:,1] = log_p_old
-  sum_log_p_d_e[1] = sum(log_p_old[1:n_walkers])/n_walkers
+  a = StatsBase.sample([i for i in 1:n_walkers if i != n])
+  b = StatsBase.sample([i for i in 1:n_walkers if (i != n && i != a)])
 
-  x_chain[:, 1, :] = ensemble_old
+  par_active_1 = ensemble_old[a,:]
+  par_active_2 = ensemble_old[b,:]
 
-  # the loop
-
-  for l in 2:chain_length
-
-    for n in 1:n_walkers
-
-      z = 2.38 / sqrt(2 * n_dim)
-      if (l % 10 == 0)
-        z=1
-      end
-
-      a = StatsBase.sample(deleteat!(collect(1:1:n_walkers), n))
-      b = StatsBase.sample(deleteat!(collect(1:1:n_walkers), sort([n,a])))
-
-      par_active_1 = ensemble_old[a,:]
-      par_active_2 = ensemble_old[b,:]
-
-      ensemble_new[n,:] = ensemble_old[n,:] + z*(par_active_1 - par_active_2)
-
-      log_p_new = f(ensemble_new[n,:])
-      acc = exp(log_p_new - log_p_old[n])
-      test = rand()
-
-      if (acc > test)
-
-        x_chain[n,l,:] = ensemble_new[n,:]
-        ensemble_old[n,:] = ensemble_new[n,:]
-        log_p[n,l] = log_p_new
-        log_p_old[n] = log_p_new
-
-      else
-
-        x_chain[n,l,:] = ensemble_old[n,:]
-        log_p[n,l,:] = log_p_old[n]
-
-      end
-
-      sum_log_p_d_e[l] = sum_log_p_d_e[l] + log_p[n,l]/n_walkers
-
-    end
-
-  end
-
-  return x_chain
+  return ensemble_old[n,:] + z*(par_active_1 - par_active_2)
 
 end
 
