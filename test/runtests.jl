@@ -9,11 +9,9 @@ function p_log(x::Array{Float64})
 end
 
 function log_post_20_d_rosenbrock(xx)
-
-  y=0
+  y=0.0
   for dim in 1:19
-
-    w = -(1-xx[dim])^2 - 100*(xx[dim+1]-xx[dim]^2)^2
+    w = -(1.0-xx[dim])^2 - 100.0*(xx[dim+1]-xx[dim]^2)^2
     y += w
   end
 
