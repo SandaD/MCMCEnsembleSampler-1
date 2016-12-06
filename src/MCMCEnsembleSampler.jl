@@ -15,17 +15,18 @@ function mcmc(f::Function, max_iter::Int, n_walkers::Int, n_dim::Int, init_range
   log_p = Array{Float64}(n_walkers, chain_length)
   log_p_old = Array{Float64}(n_walkers)
 
-  ensemble_old = rand(n_walkers, n_dim) * (init_range[2] - init_range[1]) + init_range[1]
- #transponieren ensemble_old, ensemble_new
+  ensemble_old = rand(n_dim, n_walkers) * (init_range[2] - init_range[1]) + init_range[1]
+
   ensemble_new = Array{Float64}(n_dim)
-  x_chain = Array{Float64}(n_walkers, chain_length, n_dim)
+  #x_chain = Array{Float64}(n_walkers, chain_length, n_dim) (old structure)
+  x_chain = Array{Float64}(n_dim, n_walkers, chain_length)
 
   for k in 1:n_walkers
-      log_p_old[k] = f(ensemble_old[k,:])
+      log_p_old[k] = f(ensemble_old[:,k])
   end
 
   log_p[:,1] = log_p_old
-  x_chain[:, 1, :] = ensemble_old
+  x_chain[:, :, 1] = ensemble_old
 
   # the loop
   for l in 2:chain_length
@@ -41,12 +42,12 @@ function mcmc(f::Function, max_iter::Int, n_walkers::Int, n_dim::Int, init_range
 
       acc = exp(log_p_new - log_p_old[n])
       if (acc > rand())
-        x_chain[n,l,:] = ensemble_new
-        ensemble_old[n,:] = ensemble_new
+        x_chain[:,n,l] = ensemble_new
+        ensemble_old[:,n] = ensemble_new
         log_p[n,l] = log_p_new
         log_p_old[n] = log_p_new
       else
-        x_chain[n,l,:] = ensemble_old[n,:]
+        x_chain[:,n,l] = ensemble_old[:,n]
         log_p[n,l,:] = log_p_old[n]
       end
 
@@ -60,9 +61,9 @@ function s_m(n_walkers::Int, ensemble_old::Array{Float64}, n_dim::Int, n::Int)
 
   z = ((rand()+1)^2)/2
   a = StatsBase.sample([i for i in 1:n_walkers if i != n])
-  par_active = ensemble_old[a,:]
+  par_active = ensemble_old[:,a]
 
-  return par_active + z^(n_dim-1) * (ensemble_old[n,:] - par_active)
+  return par_active + z^(n_dim-1) * (ensemble_old[:,n] - par_active)
 end
 
 
@@ -76,10 +77,10 @@ function d_e(n_walkers::Int, ensemble_old::Array{Float64}, n_dim::Int, n::Int, l
   a = StatsBase.sample([i for i in 1:n_walkers if i != n])
   b = StatsBase.sample([i for i in 1:n_walkers if (i != n && i != a)])
 
-  par_active_1 = ensemble_old[a,:]
-  par_active_2 = ensemble_old[b,:]
+  par_active_1 = ensemble_old[:,a]
+  par_active_2 = ensemble_old[:,b]
 
-  return ensemble_old[n,:] + z*(par_active_1 - par_active_2)
+  return ensemble_old[:,n] + z*(par_active_1 - par_active_2)
 
 end
 
